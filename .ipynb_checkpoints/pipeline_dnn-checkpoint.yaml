@@ -1,0 +1,394 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: deep-learning-ids-ips-
+  annotations: {pipelines.kubeflow.org/kfp_sdk_version: 1.6.3, pipelines.kubeflow.org/pipeline_compilation_time: '2022-12-07T05:51:46.809142',
+    pipelines.kubeflow.org/pipeline_spec: '{"description": "Pipeline", "inputs": [{"name":
+      "url"}], "name": "Deep Learning IDS/IPS"}'}
+  labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.6.3}
+spec:
+  entrypoint: deep-learning-ids-ips
+  templates:
+  - name: deep-learning-ids-ips
+    inputs:
+      parameters:
+      - {name: url}
+    dag:
+      tasks:
+      - name: evaluate-model
+        template: evaluate-model
+        dependencies: [prepare-data, train-data]
+        arguments:
+          artifacts:
+          - {name: prepare-data-X_test, from: '{{tasks.prepare-data.outputs.artifacts.prepare-data-X_test}}'}
+          - {name: prepare-data-Y_test, from: '{{tasks.prepare-data.outputs.artifacts.prepare-data-Y_test}}'}
+          - {name: train-data-model_dir, from: '{{tasks.train-data.outputs.artifacts.train-data-model_dir}}'}
+      - name: prepare-data
+        template: prepare-data
+        arguments:
+          parameters:
+          - {name: url, value: '{{inputs.parameters.url}}'}
+      - name: train-data
+        template: train-data
+        dependencies: [prepare-data]
+        arguments:
+          artifacts:
+          - {name: prepare-data-X_test, from: '{{tasks.prepare-data.outputs.artifacts.prepare-data-X_test}}'}
+          - {name: prepare-data-X_train, from: '{{tasks.prepare-data.outputs.artifacts.prepare-data-X_train}}'}
+          - {name: prepare-data-Y_test, from: '{{tasks.prepare-data.outputs.artifacts.prepare-data-Y_test}}'}
+          - {name: prepare-data-Y_train, from: '{{tasks.prepare-data.outputs.artifacts.prepare-data-Y_train}}'}
+  - name: evaluate-model
+    container:
+      args: [--model-dir, /tmp/inputs/model_dir/data, --X-test, /tmp/inputs/X_test/data,
+        --Y-test, /tmp/inputs/Y_test/data, '----output-paths', /tmp/outputs/mlpipeline_metrics/data]
+      command:
+      - sh
+      - -c
+      - (PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location
+        'joblib' 'tensorflow' 'scikit-learn' || PIP_DISABLE_PIP_VERSION_CHECK=1 python3
+        -m pip install --quiet --no-warn-script-location 'joblib' 'tensorflow' 'scikit-learn'
+        --user) && "$0" "$@"
+      - sh
+      - -ec
+      - |
+        program_path=$(mktemp)
+        printf "%s" "$0" > "$program_path"
+        python3 -u "$program_path" "$@"
+      - "def evaluate_model(\n    model_dir,\n    X_test_path,\n    Y_test_path\n\
+        ):\n    import os\n    import tensorflow as tf\n    from tensorflow import\
+        \ keras\n    from sklearn.preprocessing import LabelEncoder\n    from collections\
+        \ import namedtuple\n    lb = LabelEncoder()\n    X_test = joblib.load(X_test_path)\n\
+        \    Y_test = joblib.load(Y_test_path)\n    Y_test = lb.fit_transform(Y_test)\n\
+        \    model = tf.keras.models.load_model(model_dir)\n    model.summary()\n\
+        \    loss, accuracy = model.evaluate(X_test, Y_test, verbose=2)\n    metrics\
+        \ = {\n        \"metrics\": [\n            {\"name\": \"loss\", \"numberValue\"\
+        : str(loss), \"format\": \"PERCENTAGE\"},\n            {\"name\": \"accuracy\"\
+        , \"numberValue\": str(accuracy), \"format\": \"PERCENTAGE\"},\n        ]\n\
+        \    }\n\n    with open(metrics_path, \"w\") as f:\n        json.dump(metrics,\
+        \ f)\n\n    out_tuple = namedtuple(\"EvaluationOutput\", [\"mlpipeline_metrics\"\
+        ])\n    return out_tuple(json.dumps(metrics))   \n\nimport argparse\n_parser\
+        \ = argparse.ArgumentParser(prog='Evaluate model', description='')\n_parser.add_argument(\"\
+        --model-dir\", dest=\"model_dir\", type=str, required=True, default=argparse.SUPPRESS)\n\
+        _parser.add_argument(\"--X-test\", dest=\"X_test_path\", type=str, required=True,\
+        \ default=argparse.SUPPRESS)\n_parser.add_argument(\"--Y-test\", dest=\"Y_test_path\"\
+        , type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"\
+        ----output-paths\", dest=\"_output_paths\", type=str, nargs=1)\n_parsed_args\
+        \ = vars(_parser.parse_args())\n_output_files = _parsed_args.pop(\"_output_paths\"\
+        , [])\n\n_outputs = evaluate_model(**_parsed_args)\n\n_output_serializers\
+        \ = [\n    str,\n\n]\n\nimport os\nfor idx, output_file in enumerate(_output_files):\n\
+        \    try:\n        os.makedirs(os.path.dirname(output_file))\n    except OSError:\n\
+        \        pass\n    with open(output_file, 'w') as f:\n        f.write(_output_serializers[idx](_outputs[idx]))\n"
+      image: python:3.7
+    inputs:
+      artifacts:
+      - {name: prepare-data-X_test, path: /tmp/inputs/X_test/data}
+      - {name: prepare-data-Y_test, path: /tmp/inputs/Y_test/data}
+      - {name: train-data-model_dir, path: /tmp/inputs/model_dir/data}
+    outputs:
+      artifacts:
+      - {name: mlpipeline-metrics, path: /tmp/outputs/mlpipeline_metrics/data}
+    metadata:
+      labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.6.3, pipelines.kubeflow.org/pipeline-sdk-type: kfp}
+      annotations: {pipelines.kubeflow.org/component_spec: '{"implementation": {"container":
+          {"args": ["--model-dir", {"inputPath": "model_dir"}, "--X-test", {"inputPath":
+          "X_test"}, "--Y-test", {"inputPath": "Y_test"}, "----output-paths", {"outputPath":
+          "mlpipeline_metrics"}], "command": ["sh", "-c", "(PIP_DISABLE_PIP_VERSION_CHECK=1
+          python3 -m pip install --quiet --no-warn-script-location ''joblib'' ''tensorflow''
+          ''scikit-learn'' || PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install
+          --quiet --no-warn-script-location ''joblib'' ''tensorflow'' ''scikit-learn''
+          --user) && \"$0\" \"$@\"", "sh", "-ec", "program_path=$(mktemp)\nprintf
+          \"%s\" \"$0\" > \"$program_path\"\npython3 -u \"$program_path\" \"$@\"\n",
+          "def evaluate_model(\n    model_dir,\n    X_test_path,\n    Y_test_path\n):\n    import
+          os\n    import tensorflow as tf\n    from tensorflow import keras\n    from
+          sklearn.preprocessing import LabelEncoder\n    from collections import namedtuple\n    lb
+          = LabelEncoder()\n    X_test = joblib.load(X_test_path)\n    Y_test = joblib.load(Y_test_path)\n    Y_test
+          = lb.fit_transform(Y_test)\n    model = tf.keras.models.load_model(model_dir)\n    model.summary()\n    loss,
+          accuracy = model.evaluate(X_test, Y_test, verbose=2)\n    metrics = {\n        \"metrics\":
+          [\n            {\"name\": \"loss\", \"numberValue\": str(loss), \"format\":
+          \"PERCENTAGE\"},\n            {\"name\": \"accuracy\", \"numberValue\":
+          str(accuracy), \"format\": \"PERCENTAGE\"},\n        ]\n    }\n\n    with
+          open(metrics_path, \"w\") as f:\n        json.dump(metrics, f)\n\n    out_tuple
+          = namedtuple(\"EvaluationOutput\", [\"mlpipeline_metrics\"])\n    return
+          out_tuple(json.dumps(metrics))   \n\nimport argparse\n_parser = argparse.ArgumentParser(prog=''Evaluate
+          model'', description='''')\n_parser.add_argument(\"--model-dir\", dest=\"model_dir\",
+          type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"--X-test\",
+          dest=\"X_test_path\", type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"--Y-test\",
+          dest=\"Y_test_path\", type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"----output-paths\",
+          dest=\"_output_paths\", type=str, nargs=1)\n_parsed_args = vars(_parser.parse_args())\n_output_files
+          = _parsed_args.pop(\"_output_paths\", [])\n\n_outputs = evaluate_model(**_parsed_args)\n\n_output_serializers
+          = [\n    str,\n\n]\n\nimport os\nfor idx, output_file in enumerate(_output_files):\n    try:\n        os.makedirs(os.path.dirname(output_file))\n    except
+          OSError:\n        pass\n    with open(output_file, ''w'') as f:\n        f.write(_output_serializers[idx](_outputs[idx]))\n"],
+          "image": "python:3.7"}}, "inputs": [{"name": "model_dir", "type": "String"},
+          {"name": "X_test", "type": "PKL"}, {"name": "Y_test", "type": "PKL"}], "name":
+          "Evaluate model", "outputs": [{"name": "mlpipeline_metrics", "type": "Metrics"}]}',
+        pipelines.kubeflow.org/component_ref: '{}'}
+  - name: prepare-data
+    container:
+      args: [--url, '{{inputs.parameters.url}}', --X-train, /tmp/outputs/X_train/data,
+        --Y-train, /tmp/outputs/Y_train/data, --X-test, /tmp/outputs/X_test/data,
+        --Y-test, /tmp/outputs/Y_test/data]
+      command:
+      - sh
+      - -c
+      - (PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location
+        'joblib' 'keras' 'tensorflow' 'wget' 'scikit-learn' 'matplotlib' 'pandas'
+        'numpy' 'seaborn' || PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install
+        --quiet --no-warn-script-location 'joblib' 'keras' 'tensorflow' 'wget' 'scikit-learn'
+        'matplotlib' 'pandas' 'numpy' 'seaborn' --user) && "$0" "$@"
+      - sh
+      - -ec
+      - |
+        program_path=$(mktemp)
+        printf "%s" "$0" > "$program_path"
+        python3 -u "$program_path" "$@"
+      - "def _make_parent_dirs_and_return_path(file_path: str):\n    import os\n \
+        \   os.makedirs(os.path.dirname(file_path), exist_ok=True)\n    return file_path\n\
+        \ndef prepare_data(\n    url,\n    X_train_path,\n    Y_train_path,\n    X_test_path,\n\
+        \    Y_test_path\n):  \n    import os\n    import pandas as pd\n    import\
+        \ numpy as np\n    import matplotlib.pyplot as plt\n    import seaborn as\
+        \ sns\n    import time\n    import matplotlib.pyplot as plt\n    import tensorflow\
+        \ as tf\n    from tensorflow import keras\n    from sklearn.model_selection\
+        \ import train_test_split\n    from sklearn.preprocessing import MinMaxScaler\n\
+        \    from sklearn.metrics import accuracy_score\n    import numpy as np\n\
+        \    import matplotlib.pyplot as plt\n    from keras.models import Sequential\n\
+        \    from keras.layers import Dense\n    from keras.wrappers.scikit_learn\
+        \ import KerasClassifier\n    import joblib\n    import wget\n\n    wget.download(url)\n\
+        \    cols=\"\"\"duration,\n    protocol_type,\n    service,\n    flag,\n \
+        \   src_bytes,\n    dst_bytes,\n    land,\n    wrong_fragment,\n    urgent,\n\
+        \    hot,\n    num_failed_logins,\n    logged_in,\n    num_compromised,\n\
+        \    root_shell,\n    su_attempted,\n    num_root,\n    num_file_creations,\n\
+        \    num_shells,\n    num_access_files,\n    num_outbound_cmds,\n    is_host_login,\n\
+        \    is_guest_login,\n    count,\n    srv_count,\n    serror_rate,\n    srv_serror_rate,\n\
+        \    rerror_rate,\n    srv_rerror_rate,\n    same_srv_rate,\n    diff_srv_rate,\n\
+        \    srv_diff_host_rate,\n    dst_host_count,\n    dst_host_srv_count,\n \
+        \   dst_host_same_srv_rate,\n    dst_host_diff_srv_rate,\n    dst_host_same_src_port_rate,\n\
+        \    dst_host_srv_diff_host_rate,\n    dst_host_serror_rate,\n    dst_host_srv_serror_rate,\n\
+        \    dst_host_rerror_rate,\n    dst_host_srv_rerror_rate\"\"\"\n\n    columns=[]\n\
+        \    for c in cols.split(','):\n        if(c.strip()):\n            columns.append(c.strip())\n\
+        \    columns.append('target')\n\n    attacks_types = {\n    'normal': 'normal',\n\
+        \    'back': 'dos',\n    'buffer_overflow': 'u2r',\n    'ftp_write': 'r2l',\n\
+        \    'guess_passwd': 'r2l',\n    'imap': 'r2l',\n    'ipsweep': 'probe',\n\
+        \    'land': 'dos',\n    'loadmodule': 'u2r',\n    'multihop': 'r2l',\n  \
+        \  'neptune': 'dos',\n    'nmap': 'probe',\n    'perl': 'u2r',\n    'phf':\
+        \ 'r2l',\n    'pod': 'dos',\n    'portsweep': 'probe',\n    'rootkit': 'u2r',\n\
+        \    'satan': 'probe',\n    'smurf': 'dos',\n    'spy': 'r2l',\n    'teardrop':\
+        \ 'dos',\n    'warezclient': 'r2l',\n    'warezmaster': 'r2l',\n    }\n  \
+        \  path = \"kddcup.data_10_percent.gz\"\n    df = pd.read_csv(path,names=columns)\n\
+        \n    #Adding Attack Type column\n    df['Attack Type'] = df.target.apply(lambda\
+        \ r:attacks_types[r[:-1]])\n    #Finding categorical features\n    num_cols\
+        \ = df._get_numeric_data().columns\n\n    cate_cols = list(set(df.columns)-set(num_cols))\n\
+        \    cate_cols.remove('target')\n    cate_cols.remove('Attack Type')\n   \
+        \ df = df.dropna('columns')# drop columns with NaN\n\n    df = df[[col for\
+        \ col in df if df[col].nunique() > 1]]# keep columns where there are more\
+        \ than 1 unique values\n\n    corr = df.corr()\n    df.drop('num_root',axis\
+        \ = 1,inplace = True)\n    df.drop('srv_serror_rate',axis = 1,inplace = True)\n\
+        \    df.drop('srv_rerror_rate',axis = 1, inplace=True)\n    df.drop('dst_host_srv_serror_rate',axis\
+        \ = 1, inplace=True)\n    df.drop('dst_host_serror_rate',axis = 1, inplace=True)\n\
+        \    df.drop('dst_host_rerror_rate',axis = 1, inplace=True)\n    df.drop('dst_host_srv_rerror_rate',axis\
+        \ = 1, inplace=True)\n    df.drop('dst_host_same_srv_rate',axis = 1, inplace=True)\n\
+        \    df_std = df.std()\n    df_std = df_std.sort_values(ascending = True)\n\
+        \    #protocol_type feature mapping\n    pmap = {'icmp':0,'tcp':1,'udp':2}\n\
+        \    df['protocol_type'] = df['protocol_type'].map(pmap)\n    #flag feature\
+        \ mapping\n    fmap = {'SF':0,'S0':1,'REJ':2,'RSTR':3,'RSTO':4,'SH':5 ,'S1':6\
+        \ ,'S2':7,'RSTOS0':8,'S3':9 ,'OTH':10}\n    df['flag'] = df['flag'].map(fmap)\n\
+        \    df.drop('service',axis = 1,inplace= True)\n    df = df.drop(['target',],\
+        \ axis=1)\n    print(df.shape)\n\n    # Target variable and train set\n  \
+        \  Y = df[['Attack Type']]\n    X = df.drop(['Attack Type',], axis=1)\n\n\
+        \    sc = MinMaxScaler()\n    X = sc.fit_transform(X)\n\n    # Split test\
+        \ and train data \n    X_train, X_test, Y_train, Y_test = train_test_split(X,\
+        \ Y, test_size=0.33, random_state=42)\n    joblib.dump(X_train,X_train_path)\n\
+        \    joblib.dump(Y_train,Y_train_path)\n    joblib.dump(X_test,X_test_path)\n\
+        \    joblib.dump(Y_test,Y_test_path)\n\n    print(X_train.shape, X_test.shape)\n\
+        \    print(Y_train.shape, Y_test.shape)\n\nimport argparse\n_parser = argparse.ArgumentParser(prog='Prepare\
+        \ data', description='')\n_parser.add_argument(\"--url\", dest=\"url\", type=str,\
+        \ required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"--X-train\"\
+        , dest=\"X_train_path\", type=_make_parent_dirs_and_return_path, required=True,\
+        \ default=argparse.SUPPRESS)\n_parser.add_argument(\"--Y-train\", dest=\"\
+        Y_train_path\", type=_make_parent_dirs_and_return_path, required=True, default=argparse.SUPPRESS)\n\
+        _parser.add_argument(\"--X-test\", dest=\"X_test_path\", type=_make_parent_dirs_and_return_path,\
+        \ required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"--Y-test\"\
+        , dest=\"Y_test_path\", type=_make_parent_dirs_and_return_path, required=True,\
+        \ default=argparse.SUPPRESS)\n_parsed_args = vars(_parser.parse_args())\n\n\
+        _outputs = prepare_data(**_parsed_args)\n"
+      image: python:3.7
+    inputs:
+      parameters:
+      - {name: url}
+    outputs:
+      artifacts:
+      - {name: prepare-data-X_test, path: /tmp/outputs/X_test/data}
+      - {name: prepare-data-X_train, path: /tmp/outputs/X_train/data}
+      - {name: prepare-data-Y_test, path: /tmp/outputs/Y_test/data}
+      - {name: prepare-data-Y_train, path: /tmp/outputs/Y_train/data}
+    metadata:
+      labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.6.3, pipelines.kubeflow.org/pipeline-sdk-type: kfp}
+      annotations: {pipelines.kubeflow.org/component_spec: '{"implementation": {"container":
+          {"args": ["--url", {"inputValue": "url"}, "--X-train", {"outputPath": "X_train"},
+          "--Y-train", {"outputPath": "Y_train"}, "--X-test", {"outputPath": "X_test"},
+          "--Y-test", {"outputPath": "Y_test"}], "command": ["sh", "-c", "(PIP_DISABLE_PIP_VERSION_CHECK=1
+          python3 -m pip install --quiet --no-warn-script-location ''joblib'' ''keras''
+          ''tensorflow'' ''wget'' ''scikit-learn'' ''matplotlib'' ''pandas'' ''numpy''
+          ''seaborn'' || PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet
+          --no-warn-script-location ''joblib'' ''keras'' ''tensorflow'' ''wget'' ''scikit-learn''
+          ''matplotlib'' ''pandas'' ''numpy'' ''seaborn'' --user) && \"$0\" \"$@\"",
+          "sh", "-ec", "program_path=$(mktemp)\nprintf \"%s\" \"$0\" > \"$program_path\"\npython3
+          -u \"$program_path\" \"$@\"\n", "def _make_parent_dirs_and_return_path(file_path:
+          str):\n    import os\n    os.makedirs(os.path.dirname(file_path), exist_ok=True)\n    return
+          file_path\n\ndef prepare_data(\n    url,\n    X_train_path,\n    Y_train_path,\n    X_test_path,\n    Y_test_path\n):  \n    import
+          os\n    import pandas as pd\n    import numpy as np\n    import matplotlib.pyplot
+          as plt\n    import seaborn as sns\n    import time\n    import matplotlib.pyplot
+          as plt\n    import tensorflow as tf\n    from tensorflow import keras\n    from
+          sklearn.model_selection import train_test_split\n    from sklearn.preprocessing
+          import MinMaxScaler\n    from sklearn.metrics import accuracy_score\n    import
+          numpy as np\n    import matplotlib.pyplot as plt\n    from keras.models
+          import Sequential\n    from keras.layers import Dense\n    from keras.wrappers.scikit_learn
+          import KerasClassifier\n    import joblib\n    import wget\n\n    wget.download(url)\n    cols=\"\"\"duration,\n    protocol_type,\n    service,\n    flag,\n    src_bytes,\n    dst_bytes,\n    land,\n    wrong_fragment,\n    urgent,\n    hot,\n    num_failed_logins,\n    logged_in,\n    num_compromised,\n    root_shell,\n    su_attempted,\n    num_root,\n    num_file_creations,\n    num_shells,\n    num_access_files,\n    num_outbound_cmds,\n    is_host_login,\n    is_guest_login,\n    count,\n    srv_count,\n    serror_rate,\n    srv_serror_rate,\n    rerror_rate,\n    srv_rerror_rate,\n    same_srv_rate,\n    diff_srv_rate,\n    srv_diff_host_rate,\n    dst_host_count,\n    dst_host_srv_count,\n    dst_host_same_srv_rate,\n    dst_host_diff_srv_rate,\n    dst_host_same_src_port_rate,\n    dst_host_srv_diff_host_rate,\n    dst_host_serror_rate,\n    dst_host_srv_serror_rate,\n    dst_host_rerror_rate,\n    dst_host_srv_rerror_rate\"\"\"\n\n    columns=[]\n    for
+          c in cols.split('',''):\n        if(c.strip()):\n            columns.append(c.strip())\n    columns.append(''target'')\n\n    attacks_types
+          = {\n    ''normal'': ''normal'',\n    ''back'': ''dos'',\n    ''buffer_overflow'':
+          ''u2r'',\n    ''ftp_write'': ''r2l'',\n    ''guess_passwd'': ''r2l'',\n    ''imap'':
+          ''r2l'',\n    ''ipsweep'': ''probe'',\n    ''land'': ''dos'',\n    ''loadmodule'':
+          ''u2r'',\n    ''multihop'': ''r2l'',\n    ''neptune'': ''dos'',\n    ''nmap'':
+          ''probe'',\n    ''perl'': ''u2r'',\n    ''phf'': ''r2l'',\n    ''pod'':
+          ''dos'',\n    ''portsweep'': ''probe'',\n    ''rootkit'': ''u2r'',\n    ''satan'':
+          ''probe'',\n    ''smurf'': ''dos'',\n    ''spy'': ''r2l'',\n    ''teardrop'':
+          ''dos'',\n    ''warezclient'': ''r2l'',\n    ''warezmaster'': ''r2l'',\n    }\n    path
+          = \"kddcup.data_10_percent.gz\"\n    df = pd.read_csv(path,names=columns)\n\n    #Adding
+          Attack Type column\n    df[''Attack Type''] = df.target.apply(lambda r:attacks_types[r[:-1]])\n    #Finding
+          categorical features\n    num_cols = df._get_numeric_data().columns\n\n    cate_cols
+          = list(set(df.columns)-set(num_cols))\n    cate_cols.remove(''target'')\n    cate_cols.remove(''Attack
+          Type'')\n    df = df.dropna(''columns'')# drop columns with NaN\n\n    df
+          = df[[col for col in df if df[col].nunique() > 1]]# keep columns where there
+          are more than 1 unique values\n\n    corr = df.corr()\n    df.drop(''num_root'',axis
+          = 1,inplace = True)\n    df.drop(''srv_serror_rate'',axis = 1,inplace =
+          True)\n    df.drop(''srv_rerror_rate'',axis = 1, inplace=True)\n    df.drop(''dst_host_srv_serror_rate'',axis
+          = 1, inplace=True)\n    df.drop(''dst_host_serror_rate'',axis = 1, inplace=True)\n    df.drop(''dst_host_rerror_rate'',axis
+          = 1, inplace=True)\n    df.drop(''dst_host_srv_rerror_rate'',axis = 1, inplace=True)\n    df.drop(''dst_host_same_srv_rate'',axis
+          = 1, inplace=True)\n    df_std = df.std()\n    df_std = df_std.sort_values(ascending
+          = True)\n    #protocol_type feature mapping\n    pmap = {''icmp'':0,''tcp'':1,''udp'':2}\n    df[''protocol_type'']
+          = df[''protocol_type''].map(pmap)\n    #flag feature mapping\n    fmap =
+          {''SF'':0,''S0'':1,''REJ'':2,''RSTR'':3,''RSTO'':4,''SH'':5 ,''S1'':6 ,''S2'':7,''RSTOS0'':8,''S3'':9
+          ,''OTH'':10}\n    df[''flag''] = df[''flag''].map(fmap)\n    df.drop(''service'',axis
+          = 1,inplace= True)\n    df = df.drop([''target'',], axis=1)\n    print(df.shape)\n\n    #
+          Target variable and train set\n    Y = df[[''Attack Type'']]\n    X = df.drop([''Attack
+          Type'',], axis=1)\n\n    sc = MinMaxScaler()\n    X = sc.fit_transform(X)\n\n    #
+          Split test and train data \n    X_train, X_test, Y_train, Y_test = train_test_split(X,
+          Y, test_size=0.33, random_state=42)\n    joblib.dump(X_train,X_train_path)\n    joblib.dump(Y_train,Y_train_path)\n    joblib.dump(X_test,X_test_path)\n    joblib.dump(Y_test,Y_test_path)\n\n    print(X_train.shape,
+          X_test.shape)\n    print(Y_train.shape, Y_test.shape)\n\nimport argparse\n_parser
+          = argparse.ArgumentParser(prog=''Prepare data'', description='''')\n_parser.add_argument(\"--url\",
+          dest=\"url\", type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"--X-train\",
+          dest=\"X_train_path\", type=_make_parent_dirs_and_return_path, required=True,
+          default=argparse.SUPPRESS)\n_parser.add_argument(\"--Y-train\", dest=\"Y_train_path\",
+          type=_make_parent_dirs_and_return_path, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"--X-test\",
+          dest=\"X_test_path\", type=_make_parent_dirs_and_return_path, required=True,
+          default=argparse.SUPPRESS)\n_parser.add_argument(\"--Y-test\", dest=\"Y_test_path\",
+          type=_make_parent_dirs_and_return_path, required=True, default=argparse.SUPPRESS)\n_parsed_args
+          = vars(_parser.parse_args())\n\n_outputs = prepare_data(**_parsed_args)\n"],
+          "image": "python:3.7"}}, "inputs": [{"name": "url", "type": "String"}],
+          "name": "Prepare data", "outputs": [{"name": "X_train", "type": "PKL"},
+          {"name": "Y_train", "type": "PKL"}, {"name": "X_test", "type": "PKL"}, {"name":
+          "Y_test", "type": "PKL"}]}', pipelines.kubeflow.org/component_ref: '{}',
+        pipelines.kubeflow.org/arguments.parameters: '{"url": "{{inputs.parameters.url}}"}'}
+  - name: train-data
+    container:
+      args: [--X-train, /tmp/inputs/X_train/data, --Y-train, /tmp/inputs/Y_train/data,
+        --X-test, /tmp/inputs/X_test/data, --Y-test, /tmp/inputs/Y_test/data, --model-dir,
+        /tmp/outputs/model_dir/data]
+      command:
+      - sh
+      - -c
+      - (PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location
+        'joblib' 'tensorflow' 'wget' 'scikit-learn' 'pandas' || PIP_DISABLE_PIP_VERSION_CHECK=1
+        python3 -m pip install --quiet --no-warn-script-location 'joblib' 'tensorflow'
+        'wget' 'scikit-learn' 'pandas' --user) && "$0" "$@"
+      - sh
+      - -ec
+      - |
+        program_path=$(mktemp)
+        printf "%s" "$0" > "$program_path"
+        python3 -u "$program_path" "$@"
+      - "def _make_parent_dirs_and_return_path(file_path: str):\n    import os\n \
+        \   os.makedirs(os.path.dirname(file_path), exist_ok=True)\n    return file_path\n\
+        \ndef train_data(\n    X_train_path,\n    Y_train_path,\n    X_test_path,\n\
+        \    Y_test_path,\n    model_dir\n):  \n    import os\n    import time\n \
+        \   import tensorflow as tf\n    from tensorflow import keras\n    import\
+        \ joblib\n    import wget\n    import pandas as pd\n    from sklearn.preprocessing\
+        \ import LabelEncoder\n    lb = LabelEncoder()\n    X_train = joblib.load(X_train_path)\n\
+        \    Y_train = joblib.load(Y_train_path)\n    X_test = joblib.load(X_test_path)\n\
+        \    Y_test = joblib.load(Y_test_path)\n\n    Y_train = lb.fit_transform(Y_train)\n\
+        \    Y_test = lb.fit_transform(Y_test)\n    def create_model():\n      model\
+        \ = tf.keras.models.Sequential([\n          keras.layers.Dense(30, activation='relu',\
+        \ input_dim=30,kernel_initializer='random_uniform'),\n          keras.layers.Dense(1,activation='sigmoid',kernel_initializer='random_uniform'),\n\
+        \          keras.layers.Dense(5, activation='softmax')\n      ])\n      model.compile(optimizer='adam',\n\
+        \                    loss=tf.losses.SparseCategoricalCrossentropy(from_logits=True),\n\
+        \                    metrics=[tf.metrics.SparseCategoricalAccuracy()])\n \
+        \     return model\n\n    model = create_model()\n    checkpoint_path = \"\
+        training_1/cp.ckpt\"\n    checkpoint_dir = os.path.dirname(checkpoint_path)\n\
+        \n    # Create a callback that saves the model's weights\n    cp_callback\
+        \ = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,\n       \
+        \                                              save_weights_only=True,\n \
+        \                                                    verbose=1)\n\n    model.fit(X_train,\
+        \ \n          Y_train,  \n          epochs=1,\n          batch_size=64,\n\
+        \          validation_data=(X_test, Y_test))\n\n    model.save(model_dir)\n\
+        \    print(f\"Model saved {model_dir}\")\n    print(os.listdir(model_dir))\n\
+        \nimport argparse\n_parser = argparse.ArgumentParser(prog='Train data', description='')\n\
+        _parser.add_argument(\"--X-train\", dest=\"X_train_path\", type=str, required=True,\
+        \ default=argparse.SUPPRESS)\n_parser.add_argument(\"--Y-train\", dest=\"\
+        Y_train_path\", type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"\
+        --X-test\", dest=\"X_test_path\", type=str, required=True, default=argparse.SUPPRESS)\n\
+        _parser.add_argument(\"--Y-test\", dest=\"Y_test_path\", type=str, required=True,\
+        \ default=argparse.SUPPRESS)\n_parser.add_argument(\"--model-dir\", dest=\"\
+        model_dir\", type=_make_parent_dirs_and_return_path, required=True, default=argparse.SUPPRESS)\n\
+        _parsed_args = vars(_parser.parse_args())\n\n_outputs = train_data(**_parsed_args)\n"
+      image: python:3.7
+    inputs:
+      artifacts:
+      - {name: prepare-data-X_test, path: /tmp/inputs/X_test/data}
+      - {name: prepare-data-X_train, path: /tmp/inputs/X_train/data}
+      - {name: prepare-data-Y_test, path: /tmp/inputs/Y_test/data}
+      - {name: prepare-data-Y_train, path: /tmp/inputs/Y_train/data}
+    outputs:
+      artifacts:
+      - {name: train-data-model_dir, path: /tmp/outputs/model_dir/data}
+    metadata:
+      labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.6.3, pipelines.kubeflow.org/pipeline-sdk-type: kfp}
+      annotations: {pipelines.kubeflow.org/component_spec: '{"implementation": {"container":
+          {"args": ["--X-train", {"inputPath": "X_train"}, "--Y-train", {"inputPath":
+          "Y_train"}, "--X-test", {"inputPath": "X_test"}, "--Y-test", {"inputPath":
+          "Y_test"}, "--model-dir", {"outputPath": "model_dir"}], "command": ["sh",
+          "-c", "(PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location
+          ''joblib'' ''tensorflow'' ''wget'' ''scikit-learn'' ''pandas'' || PIP_DISABLE_PIP_VERSION_CHECK=1
+          python3 -m pip install --quiet --no-warn-script-location ''joblib'' ''tensorflow''
+          ''wget'' ''scikit-learn'' ''pandas'' --user) && \"$0\" \"$@\"", "sh", "-ec",
+          "program_path=$(mktemp)\nprintf \"%s\" \"$0\" > \"$program_path\"\npython3
+          -u \"$program_path\" \"$@\"\n", "def _make_parent_dirs_and_return_path(file_path:
+          str):\n    import os\n    os.makedirs(os.path.dirname(file_path), exist_ok=True)\n    return
+          file_path\n\ndef train_data(\n    X_train_path,\n    Y_train_path,\n    X_test_path,\n    Y_test_path,\n    model_dir\n):  \n    import
+          os\n    import time\n    import tensorflow as tf\n    from tensorflow import
+          keras\n    import joblib\n    import wget\n    import pandas as pd\n    from
+          sklearn.preprocessing import LabelEncoder\n    lb = LabelEncoder()\n    X_train
+          = joblib.load(X_train_path)\n    Y_train = joblib.load(Y_train_path)\n    X_test
+          = joblib.load(X_test_path)\n    Y_test = joblib.load(Y_test_path)\n\n    Y_train
+          = lb.fit_transform(Y_train)\n    Y_test = lb.fit_transform(Y_test)\n    def
+          create_model():\n      model = tf.keras.models.Sequential([\n          keras.layers.Dense(30,
+          activation=''relu'', input_dim=30,kernel_initializer=''random_uniform''),\n          keras.layers.Dense(1,activation=''sigmoid'',kernel_initializer=''random_uniform''),\n          keras.layers.Dense(5,
+          activation=''softmax'')\n      ])\n      model.compile(optimizer=''adam'',\n                    loss=tf.losses.SparseCategoricalCrossentropy(from_logits=True),\n                    metrics=[tf.metrics.SparseCategoricalAccuracy()])\n      return
+          model\n\n    model = create_model()\n    checkpoint_path = \"training_1/cp.ckpt\"\n    checkpoint_dir
+          = os.path.dirname(checkpoint_path)\n\n    # Create a callback that saves
+          the model''s weights\n    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,\n                                                     save_weights_only=True,\n                                                     verbose=1)\n\n    model.fit(X_train,
+          \n          Y_train,  \n          epochs=1,\n          batch_size=64,\n          validation_data=(X_test,
+          Y_test))\n\n    model.save(model_dir)\n    print(f\"Model saved {model_dir}\")\n    print(os.listdir(model_dir))\n\nimport
+          argparse\n_parser = argparse.ArgumentParser(prog=''Train data'', description='''')\n_parser.add_argument(\"--X-train\",
+          dest=\"X_train_path\", type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"--Y-train\",
+          dest=\"Y_train_path\", type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"--X-test\",
+          dest=\"X_test_path\", type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"--Y-test\",
+          dest=\"Y_test_path\", type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"--model-dir\",
+          dest=\"model_dir\", type=_make_parent_dirs_and_return_path, required=True,
+          default=argparse.SUPPRESS)\n_parsed_args = vars(_parser.parse_args())\n\n_outputs
+          = train_data(**_parsed_args)\n"], "image": "python:3.7"}}, "inputs": [{"name":
+          "X_train", "type": "PKL"}, {"name": "Y_train", "type": "PKL"}, {"name":
+          "X_test", "type": "PKL"}, {"name": "Y_test", "type": "PKL"}], "name": "Train
+          data", "outputs": [{"name": "model_dir", "type": "String"}]}', pipelines.kubeflow.org/component_ref: '{}'}
+  arguments:
+    parameters:
+    - {name: url}
+  serviceAccountName: pipeline-runner
