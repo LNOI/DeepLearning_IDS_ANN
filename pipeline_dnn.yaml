@@ -2,10 +2,10 @@ apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
   generateName: deep-learning-ids-ips-
-  annotations: {pipelines.kubeflow.org/kfp_sdk_version: 1.6.3, pipelines.kubeflow.org/pipeline_compilation_time: '2022-12-07T05:51:46.809142',
+  annotations: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.17, pipelines.kubeflow.org/pipeline_compilation_time: '2022-12-12T17:34:10.244550',
     pipelines.kubeflow.org/pipeline_spec: '{"description": "Pipeline", "inputs": [{"name":
       "url"}], "name": "Deep Learning IDS/IPS"}'}
-  labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.6.3}
+  labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.17}
 spec:
   entrypoint: deep-learning-ids-ips
   templates:
@@ -45,9 +45,9 @@ spec:
       - sh
       - -c
       - (PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location
-        'joblib' 'tensorflow' 'scikit-learn' || PIP_DISABLE_PIP_VERSION_CHECK=1 python3
-        -m pip install --quiet --no-warn-script-location 'joblib' 'tensorflow' 'scikit-learn'
-        --user) && "$0" "$@"
+        'joblib' 'tensorflow' 'scikit-learn' 'pandas' || PIP_DISABLE_PIP_VERSION_CHECK=1
+        python3 -m pip install --quiet --no-warn-script-location 'joblib' 'tensorflow'
+        'scikit-learn' 'pandas' --user) && "$0" "$@"
       - sh
       - -ec
       - |
@@ -56,28 +56,29 @@ spec:
         python3 -u "$program_path" "$@"
       - "def evaluate_model(\n    model_dir,\n    X_test_path,\n    Y_test_path\n\
         ):\n    import os\n    import tensorflow as tf\n    from tensorflow import\
-        \ keras\n    from sklearn.preprocessing import LabelEncoder\n    from collections\
-        \ import namedtuple\n    lb = LabelEncoder()\n    X_test = joblib.load(X_test_path)\n\
-        \    Y_test = joblib.load(Y_test_path)\n    Y_test = lb.fit_transform(Y_test)\n\
-        \    model = tf.keras.models.load_model(model_dir)\n    model.summary()\n\
-        \    loss, accuracy = model.evaluate(X_test, Y_test, verbose=2)\n    metrics\
-        \ = {\n        \"metrics\": [\n            {\"name\": \"loss\", \"numberValue\"\
-        : str(loss), \"format\": \"PERCENTAGE\"},\n            {\"name\": \"accuracy\"\
-        , \"numberValue\": str(accuracy), \"format\": \"PERCENTAGE\"},\n        ]\n\
-        \    }\n\n    with open(metrics_path, \"w\") as f:\n        json.dump(metrics,\
-        \ f)\n\n    out_tuple = namedtuple(\"EvaluationOutput\", [\"mlpipeline_metrics\"\
-        ])\n    return out_tuple(json.dumps(metrics))   \n\nimport argparse\n_parser\
-        \ = argparse.ArgumentParser(prog='Evaluate model', description='')\n_parser.add_argument(\"\
-        --model-dir\", dest=\"model_dir\", type=str, required=True, default=argparse.SUPPRESS)\n\
-        _parser.add_argument(\"--X-test\", dest=\"X_test_path\", type=str, required=True,\
-        \ default=argparse.SUPPRESS)\n_parser.add_argument(\"--Y-test\", dest=\"Y_test_path\"\
+        \ keras\n    from sklearn.preprocessing import LabelEncoder\n    import joblib\n\
+        \    import pandas\n    from collections import namedtuple\n    lb = LabelEncoder()\n\
+        \    X_test = joblib.load(X_test_path)\n    Y_test = joblib.load(Y_test_path)\n\
+        \    Y_test = lb.fit_transform(Y_test)\n    model = tf.keras.models.load_model(model_dir)\n\
+        \    model.summary()\n    loss, accuracy = model.evaluate(X_test, Y_test,\
+        \ verbose=2)\n    metrics = {\n        \"metrics\": [\n            {\"name\"\
+        : \"loss\", \"numberValue\": str(loss), \"format\": \"PERCENTAGE\"},\n   \
+        \         {\"name\": \"accuracy\", \"numberValue\": str(accuracy), \"format\"\
+        : \"PERCENTAGE\"},\n        ]\n    }\n\n    with open(metrics_path, \"w\"\
+        ) as f:\n        json.dump(metrics, f)\n\n    out_tuple = namedtuple(\"EvaluationOutput\"\
+        , [\"mlpipeline_metrics\"])\n    return out_tuple(json.dumps(metrics))   \n\
+        \nimport argparse\n_parser = argparse.ArgumentParser(prog='Evaluate model',\
+        \ description='')\n_parser.add_argument(\"--model-dir\", dest=\"model_dir\"\
         , type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"\
-        ----output-paths\", dest=\"_output_paths\", type=str, nargs=1)\n_parsed_args\
-        \ = vars(_parser.parse_args())\n_output_files = _parsed_args.pop(\"_output_paths\"\
-        , [])\n\n_outputs = evaluate_model(**_parsed_args)\n\n_output_serializers\
-        \ = [\n    str,\n\n]\n\nimport os\nfor idx, output_file in enumerate(_output_files):\n\
-        \    try:\n        os.makedirs(os.path.dirname(output_file))\n    except OSError:\n\
-        \        pass\n    with open(output_file, 'w') as f:\n        f.write(_output_serializers[idx](_outputs[idx]))\n"
+        --X-test\", dest=\"X_test_path\", type=str, required=True, default=argparse.SUPPRESS)\n\
+        _parser.add_argument(\"--Y-test\", dest=\"Y_test_path\", type=str, required=True,\
+        \ default=argparse.SUPPRESS)\n_parser.add_argument(\"----output-paths\", dest=\"\
+        _output_paths\", type=str, nargs=1)\n_parsed_args = vars(_parser.parse_args())\n\
+        _output_files = _parsed_args.pop(\"_output_paths\", [])\n\n_outputs = evaluate_model(**_parsed_args)\n\
+        \n_output_serializers = [\n    str,\n\n]\n\nimport os\nfor idx, output_file\
+        \ in enumerate(_output_files):\n    try:\n        os.makedirs(os.path.dirname(output_file))\n\
+        \    except OSError:\n        pass\n    with open(output_file, 'w') as f:\n\
+        \        f.write(_output_serializers[idx](_outputs[idx]))\n"
       image: python:3.7
     inputs:
       artifacts:
@@ -88,20 +89,24 @@ spec:
       artifacts:
       - {name: mlpipeline-metrics, path: /tmp/outputs/mlpipeline_metrics/data}
     metadata:
-      labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.6.3, pipelines.kubeflow.org/pipeline-sdk-type: kfp}
+      labels:
+        pipelines.kubeflow.org/kfp_sdk_version: 1.8.17
+        pipelines.kubeflow.org/pipeline-sdk-type: kfp
+        pipelines.kubeflow.org/enable_caching: "true"
       annotations: {pipelines.kubeflow.org/component_spec: '{"implementation": {"container":
           {"args": ["--model-dir", {"inputPath": "model_dir"}, "--X-test", {"inputPath":
           "X_test"}, "--Y-test", {"inputPath": "Y_test"}, "----output-paths", {"outputPath":
           "mlpipeline_metrics"}], "command": ["sh", "-c", "(PIP_DISABLE_PIP_VERSION_CHECK=1
           python3 -m pip install --quiet --no-warn-script-location ''joblib'' ''tensorflow''
-          ''scikit-learn'' || PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install
-          --quiet --no-warn-script-location ''joblib'' ''tensorflow'' ''scikit-learn''
-          --user) && \"$0\" \"$@\"", "sh", "-ec", "program_path=$(mktemp)\nprintf
+          ''scikit-learn'' ''pandas'' || PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m
+          pip install --quiet --no-warn-script-location ''joblib'' ''tensorflow''
+          ''scikit-learn'' ''pandas'' --user) && \"$0\" \"$@\"", "sh", "-ec", "program_path=$(mktemp)\nprintf
           \"%s\" \"$0\" > \"$program_path\"\npython3 -u \"$program_path\" \"$@\"\n",
           "def evaluate_model(\n    model_dir,\n    X_test_path,\n    Y_test_path\n):\n    import
           os\n    import tensorflow as tf\n    from tensorflow import keras\n    from
-          sklearn.preprocessing import LabelEncoder\n    from collections import namedtuple\n    lb
-          = LabelEncoder()\n    X_test = joblib.load(X_test_path)\n    Y_test = joblib.load(Y_test_path)\n    Y_test
+          sklearn.preprocessing import LabelEncoder\n    import joblib\n    import
+          pandas\n    from collections import namedtuple\n    lb = LabelEncoder()\n    X_test
+          = joblib.load(X_test_path)\n    Y_test = joblib.load(Y_test_path)\n    Y_test
           = lb.fit_transform(Y_test)\n    model = tf.keras.models.load_model(model_dir)\n    model.summary()\n    loss,
           accuracy = model.evaluate(X_test, Y_test, verbose=2)\n    metrics = {\n        \"metrics\":
           [\n            {\"name\": \"loss\", \"numberValue\": str(loss), \"format\":
@@ -221,7 +226,10 @@ spec:
       - {name: prepare-data-Y_test, path: /tmp/outputs/Y_test/data}
       - {name: prepare-data-Y_train, path: /tmp/outputs/Y_train/data}
     metadata:
-      labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.6.3, pipelines.kubeflow.org/pipeline-sdk-type: kfp}
+      labels:
+        pipelines.kubeflow.org/kfp_sdk_version: 1.8.17
+        pipelines.kubeflow.org/pipeline-sdk-type: kfp
+        pipelines.kubeflow.org/enable_caching: "true"
       annotations: {pipelines.kubeflow.org/component_spec: '{"implementation": {"container":
           {"args": ["--url", {"inputValue": "url"}, "--X-train", {"outputPath": "X_train"},
           "--Y-train", {"outputPath": "Y_train"}, "--X-test", {"outputPath": "X_test"},
@@ -350,7 +358,10 @@ spec:
       artifacts:
       - {name: train-data-model_dir, path: /tmp/outputs/model_dir/data}
     metadata:
-      labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.6.3, pipelines.kubeflow.org/pipeline-sdk-type: kfp}
+      labels:
+        pipelines.kubeflow.org/kfp_sdk_version: 1.8.17
+        pipelines.kubeflow.org/pipeline-sdk-type: kfp
+        pipelines.kubeflow.org/enable_caching: "true"
       annotations: {pipelines.kubeflow.org/component_spec: '{"implementation": {"container":
           {"args": ["--X-train", {"inputPath": "X_train"}, "--Y-train", {"inputPath":
           "Y_train"}, "--X-test", {"inputPath": "X_test"}, "--Y-test", {"inputPath":

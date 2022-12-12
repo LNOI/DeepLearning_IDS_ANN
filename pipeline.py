@@ -244,7 +244,8 @@ train_op = func_to_container_op(
 def evaluate_model(
     model_dir : InputPath(str),
     X_test_path:  InputPath("PKL"),
-    Y_test_path:  InputPath("PKL")
+    Y_test_path:  InputPath("PKL"),
+    metrics_path: OutputPath(str)
 ) -> NamedTuple("EvaluationOutput", [("mlpipeline_metrics", "Metrics")]):
     import os
     import tensorflow as tf
@@ -252,6 +253,7 @@ def evaluate_model(
     from sklearn.preprocessing import LabelEncoder
     import joblib
     import pandas
+    import json
     from collections import namedtuple
     lb = LabelEncoder()
     X_test = joblib.load(X_test_path)
@@ -318,19 +320,19 @@ def my_pipeline(url):
                      ) 
     # monitoring_task = monitoring_op() 
 
-session_cookies = "MTY3MDM3NzgxNHxOd3dBTkVsWFUwOVpORUZMV1VkWVZWVlhRazQyTjBGSVdrVklURXREVFVnMU4wWlNXRTVMVVVwUE4xY3lTRmxUTWxWSU5WUmFTVkU9fNsIv8kMYn9FxRmsuD6HJPn8tqXZDuYXmIkjQuj4qn0r"
+session_cookies = "MTY3MDgzMTI2MXxOd3dBTkZJMlFrVkpXVlpVUVZOQ1RWbFZTVGRRVURaU056VlpWRlpTUVZnMlNEWTBNazVDVVZCT1YwSkVOazlDU2tFelJGRlhXRkU9fEhbtRBH6GgXMNAhYvbBqpQirUG0jDBaWLJPLmxdo1cC"
 HOST = "http://10.64.140.43.nip.io"
 client = kfp.Client(
   host= f"{HOST}/pipeline",
   cookies = f"authservice_session={session_cookies}",
   namespace="admin"
 )
-redirect = 0
+redirect = 1
 if redirect:
     client.create_run_from_pipeline_func(
       my_pipeline,
       arguments={
-        'url': 'http://kdd.ics.uci.edu/databases/kddcup99/kddcup.data_10_percent.gz'
+        'url': 'https://github.com/LNOI/DeepLearning_IDS_ANN/raw/main/data/kddcup.data_10_percent.gz'
       }
     )
 else:
