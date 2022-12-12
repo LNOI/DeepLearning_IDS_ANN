@@ -251,6 +251,7 @@ def evaluate_model(
     from tensorflow import keras
     from sklearn.preprocessing import LabelEncoder
     import joblib
+    import pandas
     from collections import namedtuple
     lb = LabelEncoder()
     X_test = joblib.load(X_test_path)
@@ -276,7 +277,8 @@ evl_op = func_to_container_op(
     packages_to_install = [
         "joblib",
         "tensorflow",
-        "scikit-learn"
+        "scikit-learn",
+        "pandas"
     ]   
 )
 
